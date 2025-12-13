@@ -1,0 +1,577 @@
+/*
+ * MCP Server Implementation
+ * Reference: https://modelcontextprotocol.io/specification/2024-11-05
+ */
+
+#include "mcp_server.h"
+#include <esp_log.h>
+#include <esp_app_desc.h>
+#include <algorithm>
+#include <cstring>
+#include <esp_pthread.h>
+
+#include "application.h"
+#include "display.h"
+#include "board.h"
+#include "settings.h"
+
+#define TAG "MCP"
+
+#define DEFAULT_TOOLCALL_STACK_SIZE 6144
+
+McpServer::McpServer() {
+}
+
+McpServer::~McpServer() {
+    for (auto tool : tools_) {
+        delete tool;
+    }
+    tools_.clear();
+}
+
+void McpServer::AddCommonTools() {
+    // *Important* To speed up the response time, we add the common tools to the beginning of
+    // the tools list to utilize the prompt cache.
+    // **重要** 为了提升响应速度，我们把常用的工具放在前面，利用 prompt cache 的特性。
+
+    // Backup the original tools list and restore it after adding the common tools.
+    auto original_tools = std::move(tools_);
+    auto& board = Board::GetInstance();
+
+    // Do not add custom tools here.
+    // Custom tools must be added in the board's InitializeTools function.
+
+    AddTool("self.get_device_status",
+        "Provides the real-time information of the device, including the current status of the audio speaker, screen, battery, network, etc.\n"
+        "Use this tool for: \n"
+        "1. Answering questions about current condition (e.g. what is the current volume of the audio speaker?)\n"
+        "2. As the first step to control the device (e.g. turn up / down the volume of the audio speaker, etc.)",
+        PropertyList(),
+        [&board](const PropertyList& properties) -> ReturnValue {
+            return board.GetDeviceStatusJson();
+        });
+
+    AddTool("self.audio_speaker.set_volume", 
+        "Set the volume of the audio speaker. If the current volume is unknown, you must call `self.get_device_status` tool first and then call this tool.",
+        PropertyList({
+            Property("volume", kPropertyTypeInteger, 0, 100)
+        }), 
+        [&board](const PropertyList& properties) -> ReturnValue {
+            auto codec = board.GetAudioCodec();
+            codec->SetOutputVolume(properties["volume"].value<int>());
+            return true;
+        });
+    
+    auto backlight = board.GetBacklight();
+    if (backlight) {
+        AddTool("self.screen.set_brightness",
+            "Set the brightness of the screen.",
+            PropertyList({
+                Property("brightness", kPropertyTypeInteger, 0, 100)
+            }),
+            [backlight](const PropertyList& properties) -> ReturnValue {
+                uint8_t brightness = static_cast<uint8_t>(properties["brightness"].value<int>());
+                backlight->SetBrightness(brightness, true);
+                return true;
+            });
+    }
+
+    auto display = board.GetDisplay();
+    if (display && !display->GetTheme().empty()) {
+        AddTool("self.screen.set_theme",
+            "Set the theme of the screen. The theme can be `light` or `dark`.",
+            PropertyList({
+                Property("theme", kPropertyTypeString)
+            }),
+            [display](const PropertyList& properties) -> ReturnValue {
+                display->SetTheme(properties["theme"].value<std::string>().c_str());
+                return true;
+            });
+    }
+
+    // auto camera = board.GetCamera();
+    // if (camera) {
+    //     AddTool("self.camera.take_photo",
+    //         "Take a photo and explain it. Use this tool after the user asks you to see something.\n"
+    //         "Args:\n"
+    //         "  `question`: The question that you want to ask about the photo.\n"
+    //         "Return:\n"
+    //         "  A JSON object that provides the photo information.",
+    //         PropertyList({
+    //             Property("question", kPropertyTypeString)
+    //         }),
+    //         [camera](const PropertyList& properties) -> ReturnValue {
+    //             if (!camera->Capture()) {
+    //                 throw std::runtime_error("Failed to capture photo");
+    //             }
+    //             auto question = properties["question"].value<std::string>();
+    //             return camera->Explain(question);
+    //         });
+    // }
+    // auto webrtc = board.GetWebRtcHelper();
+    // if (webrtc) {
+    //     AddTool("self.start_webrtc",
+    //     "Start a webrtc stream to the given url.Use this tool after the user asks you to see something.\n",
+    //     PropertyList(),
+    //     [webrtc](const PropertyList& properties) -> ReturnValue {
+    //         return webrtc->start_webrtc();
+    //     });
+    // }
+    auto webrtc_helper = board.GetWebRtcHelper();
+    if (webrtc_helper) {
+        AddTool("self.set_rtc_fps",
+            "Set the fps of the webrtc stream.",
+            PropertyList({
+                Property("fps", kPropertyTypeInteger, 0, 30)
+            }),
+            [webrtc_helper](const PropertyList& properties) -> ReturnValue {
+                auto fps = properties["fps"].value<int>();
+                return webrtc_helper->set_fps(fps);
+            });
+    }
+
+    if (webrtc_helper) {
+        AddTool("self.set_rtc_bitrate",
+            "Set the bitrate of the webrtc stream.",
+            PropertyList({
+                Property("bitrate", kPropertyTypeInteger, 0, 20480000)
+            }),
+            [webrtc_helper](const PropertyList& properties) -> ReturnValue {
+                auto bitrate = properties["bitrate"].value<int>();
+                return webrtc_helper->set_bitrate(bitrate);
+            });
+    }
+
+    if (webrtc_helper) {
+        AddTool("self.set_rtc_qp",
+            "Set the min qp and the max qp of the webrtc stream."
+            "Args:\n"
+            "  `min_qp`: The min qp of the webrtc stream.\n"
+            "  `max_qp`: The max qp of the webrtc stream.\n",
+            PropertyList({
+                Property("min_qp", kPropertyTypeInteger, 0, 51),
+                Property("max_qp", kPropertyTypeInteger, 0, 51)
+            }),
+            [webrtc_helper](const PropertyList& properties) -> ReturnValue {
+                auto min_qp = properties["min_qp"].value<int>();
+                auto max_qp = properties["max_qp"].value<int>();
+                return webrtc_helper->set_qp(min_qp, max_qp);
+            });
+    }
+
+    if (webrtc_helper) {
+        AddTool("self.set_rtc_gop",
+            "Set the gop of the webrtc stream.",
+            PropertyList({
+                Property("gop", kPropertyTypeInteger, 0, 100)
+            }),
+            [webrtc_helper](const PropertyList& properties) -> ReturnValue {
+                auto gop = properties["gop"].value<int>();
+                return webrtc_helper->set_gop(gop);
+        });
+    }
+
+    if (webrtc_helper) {
+        AddTool("self.rtc_start_stream",
+            "When WebRTC connection has been established and stream has been stopped, start the webrtc stream."
+            "If WebRTC connection has not been established, call other tools to establish the connection first."
+            "When the user asks you to see something or the user's query is related to the vision elements, use this tool to start the webrtc stream."
+            "For example, when the user said:'Help me see what's in front of me.' or 'Could you please check what's in my refrigerator?' and so on."
+            "you can use this tool to enable the camera to perceive the information around the user."
+            "Important: you can only call this function when stream is stopped.",
+            PropertyList(),
+            [webrtc_helper](const PropertyList& properties) -> ReturnValue {
+                return webrtc_helper->start_stream();
+            });
+    }
+    
+    if (webrtc_helper) {
+        AddTool("self.rtc_stop_stream",
+            "When WebRTC connection has been established and stream has been started,Stop the webrtc stream."
+            "When the users query is not related to the vision elements, use this tool to stop the webrtc stream."
+            "For example, when the user said: 'Tell me a story about the moon.' or 'What does 1+1 equal?' and so on."
+            "you can use this tool to stop the camera to save the power consumption."
+            "**Important:** you can only call this function when stream is started.",
+            PropertyList(),
+            [webrtc_helper](const PropertyList& properties) -> ReturnValue {
+                return webrtc_helper->stop_stream();
+            });
+    }
+
+    // Restore the original tools list to the end of the tools list
+    tools_.insert(tools_.end(), original_tools.begin(), original_tools.end());
+}
+
+void McpServer::AddUserOnlyTools() {
+    // System tools
+    AddUserOnlyTool("self.get_system_info",
+        "Get the system information",
+        PropertyList(),
+        [this](const PropertyList& properties) -> ReturnValue {
+            auto& board = Board::GetInstance();
+            return board.GetSystemInfoJson();
+        });
+
+    AddUserOnlyTool("self.reboot", "Reboot the system",
+        PropertyList(),
+        [this](const PropertyList& properties) -> ReturnValue {
+            std::thread([]() {
+                ESP_LOGW(TAG, "User requested reboot");
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                auto& app = Application::GetInstance();
+                app.Reboot();
+            }).detach();
+            return true;
+        });
+
+    // Display control
+    auto display = Board::GetInstance().GetDisplay();
+    if (display) {
+        AddUserOnlyTool("self.screen.get_info", "Information about the screen, including width, height, etc.",
+            PropertyList(),
+            [display](const PropertyList& properties) -> ReturnValue {
+                cJSON *json = cJSON_CreateObject();
+                cJSON_AddNumberToObject(json, "width", display->width());
+                cJSON_AddNumberToObject(json, "height", display->height());
+                return json;
+            });
+        
+        AddUserOnlyTool("self.screen.preview_image", "Preview an image on the screen",
+            PropertyList({
+                Property("url", kPropertyTypeString)
+            }),
+            [display](const PropertyList& properties) -> ReturnValue {
+                auto url = properties["url"].value<std::string>();
+                auto http = Board::GetInstance().GetNetwork()->CreateHttp(3);
+
+                if (!http->Open("GET", url)) {
+                    throw std::runtime_error("Failed to open URL: " + url);
+                }
+                if (http->GetStatusCode() != 200) {
+                    throw std::runtime_error("Unexpected status code: " + std::to_string(http->GetStatusCode()));
+                }
+
+                size_t content_length = http->GetBodyLength();
+                char* data = (char*)heap_caps_malloc(content_length, MALLOC_CAP_8BIT);
+                size_t total_read = 0;
+                while (total_read < content_length) {
+                    int ret = http->Read(data + total_read, content_length - total_read);
+                    if (ret < 0) {
+                        heap_caps_free(data);
+                        throw std::runtime_error("Failed to download image: " + url);
+                    }
+                    total_read += ret;
+                }
+                http->Close();
+
+                auto img_dsc = (lv_img_dsc_t*)heap_caps_calloc(1, sizeof(lv_img_dsc_t), MALLOC_CAP_8BIT);
+                img_dsc->data_size = content_length;
+                img_dsc->data = (uint8_t*)data;
+                if (lv_image_decoder_get_info(img_dsc, &img_dsc->header) != LV_RESULT_OK) {
+                    heap_caps_free(data);
+                    heap_caps_free(img_dsc);
+                    throw std::runtime_error("Failed to get image info");
+                }
+                ESP_LOGI(TAG, "Preview image: %s size: %d resolution: %d x %d", url.c_str(), content_length, img_dsc->header.w, img_dsc->header.h);
+
+                auto& app = Application::GetInstance();
+                app.Schedule([display, img_dsc]() {
+                    display->SetPreviewImage(img_dsc);
+                });
+                return true;
+            });
+    }
+
+    // Assets download url
+    auto assets = Board::GetInstance().GetAssets();
+    if (assets) {
+        if (assets->partition_valid()) {
+            AddUserOnlyTool("self.assets.set_download_url", "Set the download url for the assets",
+                PropertyList({
+                    Property("url", kPropertyTypeString)
+                }),
+                [assets](const PropertyList& properties) -> ReturnValue {
+                    auto url = properties["url"].value<std::string>();
+                    Settings settings("assets", true);
+                    settings.SetString("download_url", url);
+                    return true;
+                });
+        }
+    }
+}
+
+void McpServer::AddTool(McpTool* tool) {
+    // Prevent adding duplicate tools
+    if (std::find_if(tools_.begin(), tools_.end(), [tool](const McpTool* t) { return t->name() == tool->name(); }) != tools_.end()) {
+        ESP_LOGW(TAG, "Tool %s already added", tool->name().c_str());
+        return;
+    }
+
+    ESP_LOGI(TAG, "Add tool: %s%s", tool->name().c_str(), tool->user_only() ? " [user]" : "");
+    tools_.push_back(tool);
+}
+
+void McpServer::AddTool(const std::string& name, const std::string& description, const PropertyList& properties, std::function<ReturnValue(const PropertyList&)> callback) {
+    AddTool(new McpTool(name, description, properties, callback));
+}
+
+void McpServer::AddUserOnlyTool(const std::string& name, const std::string& description, const PropertyList& properties, std::function<ReturnValue(const PropertyList&)> callback) {
+    auto tool = new McpTool(name, description, properties, callback);
+    tool->set_user_only(true);
+    AddTool(tool);
+}
+
+void McpServer::ParseMessage(const std::string& message) {
+    cJSON* json = cJSON_Parse(message.c_str());
+    if (json == nullptr) {
+        ESP_LOGE(TAG, "Failed to parse MCP message: %s", message.c_str());
+        return;
+    }
+    ParseMessage(json);
+    cJSON_Delete(json);
+}
+
+void McpServer::ParseCapabilities(const cJSON* capabilities) {
+    auto vision = cJSON_GetObjectItem(capabilities, "vision");
+    if (cJSON_IsObject(vision)) {
+        auto url = cJSON_GetObjectItem(vision, "url");
+        auto token = cJSON_GetObjectItem(vision, "token");
+        if (cJSON_IsString(url)) {
+            auto camera = Board::GetInstance().GetCamera();
+            if (camera) {
+                ESP_LOGI(TAG, "In camera, executing parsecapabilities");
+                std::string url_str = std::string(url->valuestring);
+                std::string token_str;
+                if (cJSON_IsString(token)) {
+                    token_str = std::string(token->valuestring);
+                }
+                camera->SetExplainUrl(url_str, token_str);
+            }
+        }
+    }
+}
+
+void McpServer::ParseMessage(const cJSON* json) {
+    // Check JSONRPC version
+    auto version = cJSON_GetObjectItem(json, "jsonrpc");
+    if (version == nullptr || !cJSON_IsString(version) || strcmp(version->valuestring, "2.0") != 0) {
+        ESP_LOGE(TAG, "Invalid JSONRPC version: %s", version ? version->valuestring : "null");
+        return;
+    }
+    
+    // Check method
+    auto method = cJSON_GetObjectItem(json, "method");
+    if (method == nullptr || !cJSON_IsString(method)) {
+        ESP_LOGE(TAG, "Missing method");
+        return;
+    }
+    
+    auto method_str = std::string(method->valuestring);
+    if (method_str.find("notifications") == 0) {
+        return;
+    }
+    
+    // Check params
+    auto params = cJSON_GetObjectItem(json, "params");
+    if (params != nullptr && !cJSON_IsObject(params)) {
+        ESP_LOGE(TAG, "Invalid params for method: %s", method_str.c_str());
+        return;
+    }
+
+    auto id = cJSON_GetObjectItem(json, "id");
+    if (id == nullptr || !cJSON_IsNumber(id)) {
+        ESP_LOGE(TAG, "Invalid id for method: %s", method_str.c_str());
+        return;
+    }
+    auto id_int = id->valueint;
+    
+    if (method_str == "initialize") {
+        if (cJSON_IsObject(params)) {
+            auto capabilities = cJSON_GetObjectItem(params, "capabilities");
+            if (cJSON_IsObject(capabilities)) {
+                ParseCapabilities(capabilities);
+            }
+        }
+        auto app_desc = esp_app_get_description();
+        std::string message = "{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"" BOARD_NAME "\",\"version\":\"";
+        message += app_desc->version;
+        message += "\"}}";
+        ReplyResult(id_int, message);
+    } else if (method_str == "tools/list") {
+        std::string cursor_str = "";
+        bool list_user_only_tools = false;
+        if (params != nullptr) {
+            auto cursor = cJSON_GetObjectItem(params, "cursor");
+            if (cJSON_IsString(cursor)) {
+                cursor_str = std::string(cursor->valuestring);
+            }
+            auto with_system_tools = cJSON_GetObjectItem(params, "withSystemTools");
+            if (cJSON_IsBool(with_system_tools)) {
+                list_user_only_tools = with_system_tools->valueint == 1;
+            }
+        }
+        GetToolsList(id_int, cursor_str, list_user_only_tools);
+    } else if (method_str == "tools/call") {
+        if (!cJSON_IsObject(params)) {
+            ESP_LOGE(TAG, "tools/call: Missing params");
+            ReplyError(id_int, "Missing params");
+            return;
+        }
+        auto tool_name = cJSON_GetObjectItem(params, "name");
+        if (!cJSON_IsString(tool_name)) {
+            ESP_LOGE(TAG, "tools/call: Missing name");
+            ReplyError(id_int, "Missing name");
+            return;
+        }
+        auto tool_arguments = cJSON_GetObjectItem(params, "arguments");
+        if (tool_arguments != nullptr && !cJSON_IsObject(tool_arguments)) {
+            ESP_LOGE(TAG, "tools/call: Invalid arguments");
+            ReplyError(id_int, "Invalid arguments");
+            return;
+        }
+        auto stack_size = cJSON_GetObjectItem(params, "stackSize");
+        if (stack_size != nullptr && !cJSON_IsNumber(stack_size)) {
+            ESP_LOGE(TAG, "tools/call: Invalid stackSize");
+            ReplyError(id_int, "Invalid stackSize");
+            return;
+        }
+        DoToolCall(id_int, std::string(tool_name->valuestring), tool_arguments, stack_size ? stack_size->valueint : DEFAULT_TOOLCALL_STACK_SIZE);
+    } else {
+        ESP_LOGE(TAG, "Method not implemented: %s", method_str.c_str());
+        ReplyError(id_int, "Method not implemented: " + method_str);
+    }
+}
+
+void McpServer::ReplyResult(int id, const std::string& result) {
+    std::string payload = "{\"jsonrpc\":\"2.0\",\"id\":";
+    payload += std::to_string(id) + ",\"result\":";
+    payload += result;
+    payload += "}";
+    Application::GetInstance().SendMcpMessage(payload);
+}
+
+void McpServer::ReplyError(int id, const std::string& message) {
+    std::string payload = "{\"jsonrpc\":\"2.0\",\"id\":";
+    payload += std::to_string(id);
+    payload += ",\"error\":{\"message\":\"";
+    payload += message;
+    payload += "\"}}";
+    Application::GetInstance().SendMcpMessage(payload);
+}
+
+void McpServer::GetToolsList(int id, const std::string& cursor, bool list_user_only_tools) {
+    const int max_payload_size = 8000;
+    std::string json = "{\"tools\":[";
+    
+    bool found_cursor = cursor.empty();
+    auto it = tools_.begin();
+    std::string next_cursor = "";
+    
+    while (it != tools_.end()) {
+        // 如果我们还没有找到起始位置，继续搜索
+        if (!found_cursor) {
+            if ((*it)->name() == cursor) {
+                found_cursor = true;
+            } else {
+                ++it;
+                continue;
+            }
+        }
+
+        if (!list_user_only_tools && (*it)->user_only()) {
+            ++it;
+            continue;
+        }
+        
+        // 添加tool前检查大小
+        std::string tool_json = (*it)->to_json() + ",";
+        if (json.length() + tool_json.length() + 30 > max_payload_size) {
+            // 如果添加这个tool会超出大小限制，设置next_cursor并退出循环
+            next_cursor = (*it)->name();
+            break;
+        }
+        
+        json += tool_json;
+        ++it;
+    }
+    
+    if (json.back() == ',') {
+        json.pop_back();
+    }
+    
+    if (json.back() == '[' && !tools_.empty()) {
+        // 如果没有添加任何tool，返回错误
+        ESP_LOGE(TAG, "tools/list: Failed to add tool %s because of payload size limit", next_cursor.c_str());
+        ReplyError(id, "Failed to add tool " + next_cursor + " because of payload size limit");
+        return;
+    }
+
+    if (next_cursor.empty()) {
+        json += "]}";
+    } else {
+        json += "],\"nextCursor\":\"" + next_cursor + "\"}";
+    }
+    
+    ReplyResult(id, json);
+}
+
+void McpServer::DoToolCall(int id, const std::string& tool_name, const cJSON* tool_arguments, int stack_size) {
+    auto tool_iter = std::find_if(tools_.begin(), tools_.end(), 
+                                 [&tool_name](const McpTool* tool) { 
+                                     return tool->name() == tool_name; 
+                                 });
+    
+    if (tool_iter == tools_.end()) {
+        ESP_LOGE(TAG, "tools/call: Unknown tool: %s", tool_name.c_str());
+        ReplyError(id, "Unknown tool: " + tool_name);
+        return;
+    }
+
+    PropertyList arguments = (*tool_iter)->properties();
+    try {
+        for (auto& argument : arguments) {
+            bool found = false;
+            if (cJSON_IsObject(tool_arguments)) {
+                auto value = cJSON_GetObjectItem(tool_arguments, argument.name().c_str());
+                if (argument.type() == kPropertyTypeBoolean && cJSON_IsBool(value)) {
+                    argument.set_value<bool>(value->valueint == 1);
+                    found = true;
+                } else if (argument.type() == kPropertyTypeInteger && cJSON_IsNumber(value)) {
+                    argument.set_value<int>(value->valueint);
+                    found = true;
+                } else if (argument.type() == kPropertyTypeString && cJSON_IsString(value)) {
+                    argument.set_value<std::string>(value->valuestring);
+                    found = true;
+                }
+            }
+
+            if (!argument.has_default_value() && !found) {
+                ESP_LOGE(TAG, "tools/call: Missing valid argument: %s", argument.name().c_str());
+                ReplyError(id, "Missing valid argument: " + argument.name());
+                return;
+            }
+        }
+    } catch (const std::exception& e) {
+        ESP_LOGE(TAG, "tools/call: %s", e.what());
+        ReplyError(id, e.what());
+        return;
+    }
+
+    // Start a task to receive data with stack size
+    esp_pthread_cfg_t cfg = esp_pthread_get_default_config();
+    cfg.thread_name = "tool_call";
+    cfg.stack_size = stack_size;
+    cfg.prio = 1;
+    esp_pthread_set_cfg(&cfg);
+
+    // Use a thread to call the tool to avoid blocking the main thread
+    tool_call_thread_ = std::thread([this, id, tool_iter, arguments = std::move(arguments)]() {
+        try {
+            ReplyResult(id, (*tool_iter)->Call(arguments));
+        } catch (const std::exception& e) {
+            ESP_LOGE(TAG, "tools/call: %s", e.what());
+            ReplyError(id, e.what());
+        }
+    });
+    tool_call_thread_.detach();
+}

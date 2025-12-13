@@ -1,0 +1,7 @@
+1、在不使用SERVER-AEC的情况下，Timestamps不会被赋值
+在这种情况下，我修改了包的timestamp用于测量包的发送时间
+
+主要是在websocket.cc文件中修改了SendAudio中的timestamp赋值规则：
+从使用AudioStreamPacket中的时间戳变为了取gettimeofday的值。
+同时修改了BP2，将时间戳换为了uint64_t
+同时把AudioStreamPacket的时间戳也改成了64位uint64_t
