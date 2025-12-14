@@ -1,5 +1,6 @@
 # 👁️ McpRTC
 
+([English](README_en.md) | [中文](README.md))
 
 ![Platform](https://img.shields.io/badge/Platform-ESP32-blue) ![Protocol](https://img.shields.io/badge/Protocol-MCP-purple) ![Stream](https://img.shields.io/badge/Stream-WebRTC-red) ![License](https://img.shields.io/badge/License-Apache-green)
 
@@ -48,7 +49,7 @@ git clone https://github.com/12345
 ```
 然后，**打开ESP-IDF Powershell**，进入项目目录并编译固件
 ```bash
-cd MCPRTC/xiaozhi-esp32-board
+cd McpRTC/xiaozhi-esp32-board
 idf.py set-target esp32s3
 idf.py build
 ```
@@ -56,7 +57,7 @@ idf.py build
 ```bash
 idf.py build flash monitor
 ```
-**3、服务端配置**：请参考 [xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/Deployment_all.md#%E6%96%B9%E5%BC%8F%E4%BA%8C%E6%9C%AC%E5%9C%B0%E6%BA%90%E7%A0%81%E8%BF%90%E8%A1%8C%E5%85%A8%E6%A8%A1%E5%9D%97) 项目进行服务端配置。对应的文件在 ``MCPRTC/xiaozhi-esp32-server`` 目录下。
+**3、服务端配置**：请参考 [xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/Deployment_all.md#%E6%96%B9%E5%BC%8F%E4%BA%8C%E6%9C%AC%E5%9C%B0%E6%BA%90%E7%A0%81%E8%BF%90%E8%A1%8C%E5%85%A8%E6%A8%A1%E5%9D%97) 项目进行服务端配置。对应的文件在 ``McpRTC/xiaozhi-esp32-server`` 目录下。
 
 由于原项目架构为ASR+LLM+TTS，为了将LLM替换为可以接收视频的VLM，我们对项目进行了部分修改，因此目前暂时仅支持原项目的 ``方式二：本地源码运行全模块`` 部署。
 
@@ -69,7 +70,7 @@ idf.py build flash monitor
 ## ️✨ 实机演示（Demo）
 
  
-## 🏗 架构与致谢 (Architecture & Credits)
+## 🏗 致谢 (Acknowledgement)
 
 本项目站在了巨人的肩膀上。核心代码基于以下两个仓库进行了二次开发：
 
