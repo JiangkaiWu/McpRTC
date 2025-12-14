@@ -1,34 +1,46 @@
 # 👁️ McpRTC
 
 
-![Platform](https://img.shields.io/badge/Platform-ESP32-blue) ![Protocol](https://img.shields.io/badge/Protocol-MCP-purple) ![Stream](https://img.shields.io/badge/Stream-WebRTC-red) ![License](https://img.shields.io/badge/License-MIT-green)
+![Platform](https://img.shields.io/badge/Platform-ESP32-blue) ![Protocol](https://img.shields.io/badge/Protocol-MCP-purple) ![Stream](https://img.shields.io/badge/Stream-WebRTC-red) ![License](https://img.shields.io/badge/License-Apache-green)
 
-**给大模型一双眼睛：通过 MCP协议 让 LLM 自主控制 WebRTC视频流的 Demo 实现。**
+**McpRTC：基于 MCP 协议的 Agent 原生 RTC 框架**
 
-> **Giving Eyes to LLMs.** A bridge between Model Context Protocol and ESP32 WebRTC streams.
+> ****从“被动传输”到“主动感知”，由Agent意图驱动的自主、按需、低延迟视频传输。****
 
 ## 📖 简介 (Introduction)
 
-**MCPRTC** 是一个基于 [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) 的实验性项目。
+**McpRTC** 是一个运行在 [MCP (Model Context Protocol) ](https://modelcontextprotocol.io/) 协议之上的实时通信（RTC）框架。
 
-音视频流的持续传输会给 IoT 设备带来**不可忽视的能耗、带宽问题**。**MCPRTC** 允许视觉大模型（如 Gemini）根据对话上下文，**自主决定**何时开启 WebRTC 视频流并分析画面，实现了回复延迟与带宽能耗之间的平衡。
+正如 WebRTC 解决了 Web 浏览器之间的实时通信问题，McpRTC 旨在解决 AI Agent 与物理世界之间的实时连接问题。它不仅仅是一个传输协议，更是一种AI 原生的感知范式。
 
-本项目基于优秀的开源硬件项目 **Xiaozhi (小智)** 进行深度改造，将 ESP32 提供的 WebRTC 库移植到小智平台，并首创性地将 WebRTC 的控制工具函数通过 MCP 协议提供给大模型，从而实现视觉感知的自主控制。
+在 McpRTC 中，视频流的开启与关闭不再依赖人类的手动操作，而是由 Agent 根据当前交互的上下文自主决策。同时，我们将帧率、码率等参数的控制权，从 ABR 等传输算法（规则驱动）交还给了 Agent 本身（意图驱动），让 Agent 能够根据任务需求实现真正的语义级流控。
 
-**Demo**
+## 💡 核心理念 (Core Insight)
+传统的 RTC 是 Human-Centric（以人类为中心）的，而 McpRTC 是 Agent-Centric（以Agent为中心）的。我们正在经历从规则驱动到意图驱动的范式转移：
+
+| 特性 | 传统 RTC / WebRTC            | 🤖 McpRTC                 |
+| :--- |:---------------------------|:--------------------------|
+| **触发机制** | **人类发起**（人工点击呼叫/挂断）        | **AI 自主决策**（基于意图自动介入）     |
+| **连接形态** | **持续连接**（通话期间全程视频传输）       | **按需感知**（仅在需要视觉时开启）       |
+| **QoS 控制** | **被动适应网络**（基于网络状况的算法GCC、BBR等） | **主动适应内容**（基于语义理解的控制）     |
+| **典型场景** | 视频会议、直播、1v1 通话             | Always-on 虚拟助手、具身机器人、智能眼镜 |
 
 
+## 🚀 为什么我们需要 McpRTC？一个例子 (Case Study)：
+在 Always-on AI Assistant 的场景下，持续传输高质量视频流 (1080p 30fps) 是极其低效且昂贵的（带宽、算力、功耗），对于一些可穿戴AIoT设备（如智能眼镜）来说更无法接受（如短续航）。
 
-**✨ 核心特性：**
-- 🤖 **AI 自主权**：LLM 可以调用 `start_rtc_stream` `stop_rtc_stream` 等工具主动控制视频流的开关
-- 📹 **低延迟传输**：基于 WebRTC 的实时视频流传输。
-- 🔋 **能耗友好**：通过按需开启摄像头，极大降低视频流传输带来的能耗，延长使用时间。
-- 🔊 **保留原功能**：完全兼容小智原有的语音对话功能。
+McpRTC 允许 Agent 像人类一样**决定何时“随便撇一眼”或“认真注视”**：
+1.  **纯音频交互**：当用户只是闲聊或问题无需视觉（如询问天气）时，Agent **保持视频关闭**，节省计算、电池、带宽资源。
+2.  **主动视觉介入**：当 Agent 听到异常声音（如玻璃破碎）或无法通过音频理解用户意图时，**主动发起**视频流请求，“看一眼”现场情况。
+3.  **语义级传输控制**：当 Agent 发现内容看不清、跟不上，**对任务执行有影响时**，自动提升视频码率、分辨率、帧率。否则进行降级。
 
+综上，McpRTC实现了响应延迟、准确率、带宽开销、设备能耗之间的平衡。
 
 ## 📦 使用方法 (Usage)
-⚠️ **注意**：本项目作为实验性项目，目前仅支持立创开发版实战派S3作为硬件平台，后续会适配更多平台。
+本项目基于开源硬件项目 **Xiaozhi (小智)** 进行深度改造，将 ESP32 提供的 WebRTC 库移植到小智平台，并首创性地将 WebRTC 的参数控制函数通过 MCP 协议提供给大模型，从而实现视觉感知的自主控制。
+
 **1、固件环境安装**：ESP-IDF v5.5.0 或更高版本，具体可参考 [xiaozhi编译环境安装教程](https://icnynnzcwou8.feishu.cn/wiki/JEYDwTTALi5s2zkGlFGcDiRknXf)
+
 **2、编译与烧录**:
 首先，克隆本项目到本地：
 ```bash
@@ -44,19 +56,20 @@ idf.py build
 ```bash
 idf.py build flash monitor
 ```
-**3、服务端配置**：请参考 [xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/Deployment_all.md#%E6%96%B9%E5%BC%8F%E4%BA%8C%E6%9C%AC%E5%9C%B0%E6%BA%90%E7%A0%81%E8%BF%90%E8%A1%8C%E5%85%A8%E6%A8%A1%E5%9D%97) 项目进行服务端配置。对应的文件在 ``MCPRTC/xiaozhi-esp32-server`` 目录下
-由于原项目架构为ASR+LLM+TTS，为了将LLM替换为可以接收视频的VLLM，我对项目进行了部分修改，因此目前暂时仅支持原项目的 **方式二：本地源码运行全模块** 部署。
+**3、服务端配置**：请参考 [xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server/blob/main/docs/Deployment_all.md#%E6%96%B9%E5%BC%8F%E4%BA%8C%E6%9C%AC%E5%9C%B0%E6%BA%90%E7%A0%81%E8%BF%90%E8%A1%8C%E5%85%A8%E6%A8%A1%E5%9D%97) 项目进行服务端配置。对应的文件在 ``MCPRTC/xiaozhi-esp32-server`` 目录下。
 
-⚠️部署后，需要在智控台将LLM改为gemini，并将意图识别改为函数调用意图识别，如果需要代理，请把代理开启在7890端口
+由于原项目架构为ASR+LLM+TTS，为了将LLM替换为可以接收视频的VLM，我们对项目进行了部分修改，因此目前暂时仅支持原项目的 **方式二：本地源码运行全模块** 部署。
+
+部署后，需要在智控台将LLM改为gemini，并将意图识别改为函数调用意图识别，如果需要代理，请把代理开启在7890端口
 
 **4、运行项目**：启动服务端，并确保 ESP32 设备与服务器之间的网络连接正常，即可开始与模型对话
 
-## 💡补充说明 (Additional Notes)
+⚠️ **注意**：本项目作为实验性项目，目前支持立创开发版实战派S3作为硬件平台，后续会适配更多平台。当前版本LLM可以调用 `start_rtc_stream` `stop_rtc_stream` 等工具主动控制视频流的开关。此外，**McpRTC** 还在框架层面支持LLM动态调整视频流的**码率、帧率**等参数。当前由于S3的硬件性能不足，我们实现了工具接口，但并未被LLM调用。
 
-除自主控制视频流的开启与关闭之外，**MCPRTC** 还在框架层面支持动态调整视频流的**码率、帧率**等参数，以适应不同场景要求。考虑到硬件性能限制，目前仅保留了初步实现的工具接口，更完善的实现有待补充。
+## ️✨ 实机演示（Demo）
 
  
-## 🏗️ 架构与致谢 (Architecture & Credits)
+## 🏗 架构与致谢 (Architecture & Credits)
 
 本项目站在了巨人的肩膀上。核心代码基于以下两个仓库进行了二次开发：
 
