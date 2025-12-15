@@ -69,6 +69,7 @@ idf.py build flash monitor
 
 ## ️✨ 实机演示（Demo）
 https://github.com/user-attachments/assets/c317a03e-c4b4-4290-bdbc-f33bc44ff41c
+
 上方视频通过实时的功率波动，直观展示了摄像头的开关情况。不同工作模式下的功耗变化如下：
 
 - **纯音频对话**：功率波动在 **1.1W** 左右；
@@ -85,5 +86,6 @@ https://github.com/user-attachments/assets/c317a03e-c4b4-4290-bdbc-f33bc44ff41c
 
 * **Firmware**: [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) - 提供了基于ESP32的AI智能助手原型
 * **Server**: 基于 [xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server) - 提供了适配xiaozhi-esp32的服务端实现
+
 
 
