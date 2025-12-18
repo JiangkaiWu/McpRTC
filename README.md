@@ -68,13 +68,13 @@ idf.py build flash monitor
 ⚠️ **注意**：本项目作为实验性项目，目前支持立创开发版实战派S3作为硬件平台，后续会适配更多平台。当前版本LLM可以调用 `start_rtc_stream` `stop_rtc_stream` 等工具主动控制视频流的开关。此外，**McpRTC** 还在框架层面支持LLM动态调整视频流的**码率、帧率**等参数。当前由于S3的硬件性能不足，我们实现了工具接口，但并未被LLM调用。
 
 ## ️✨ 实机演示（Demo）
-https://github.com/user-attachments/assets/c317a03e-c4b4-4290-bdbc-f33bc44ff41c
+https://github.com/user-attachments/assets/279b6baf-844d-4e49-9111-cbd73ebee5b4
 
 上方视频通过实时的功率波动，直观展示了摄像头的开关情况。不同工作模式下的功耗变化如下：
 
 - **纯音频对话**：功率波动在 **1.1W** 左右；
 - **开启视频流**：建立 WebRTC 连接并开启摄像头后，功率上升至 **1.4W** 左右；
-- **关闭视频流**：关闭摄像头（但维持 RTC 连接）时，功率回落至 **1.3W** 左右。
+
 
 > [!NOTE]
 > 这种明显的功率阶梯变化可以作为判断摄像头是否在工作的物理指标。
@@ -86,6 +86,7 @@ https://github.com/user-attachments/assets/c317a03e-c4b4-4290-bdbc-f33bc44ff41c
 
 * **Firmware**: [xiaozhi-esp32](https://github.com/78/xiaozhi-esp32) - 提供了基于ESP32的AI智能助手原型
 * **Server**: 基于 [xiaozhi-esp32-server](https://github.com/xinnan-tech/xiaozhi-esp32-server) - 提供了适配xiaozhi-esp32的服务端实现
+
 
 
 
