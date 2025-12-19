@@ -29,15 +29,15 @@ Traditional RTC is **Human-Centric**, while McpRTC is **Agent-Centric**. We are 
 
 ## 🚀 Why McpRTC? A Case Study
 
-In the context of an **Always-on AI Assistant**, continuously transmitting high-quality video (e.g., 1080p 30fps) is extremely inefficient and expensive (in terms of bandwidth, compute, and power). This is especially unacceptable for wearable AIoT devices (like smart glasses) due to battery constraints.
+In the context of an **Always-on AI Assistant**, continuously transmitting high-quality video (e.g., 1080p 30fps) 24/7 is extremely inefficient and expensive (in terms of bandwidth, compute, and power). This is especially unacceptable for wearable AIoT devices (like smart glasses) due to battery constraints.
 
-McpRTC allows Agents to **decide when to "Glance" or "Gaze"** like humans:
+McpRTC allows Agents to **decide when to "Rest", "Glance", or "Gaze"** like humans:
 
 1.  **Pure Audio Interaction**: When the user is just chatting or asking questions that don't require vision (e.g., asking about the weather), the Agent **keeps the video off** to save compute, battery, and bandwidth resources.
 2.  **Active Visual Intervention**: When the Agent hears an anomaly (e.g., glass breaking) or cannot understand the user's intent through audio alone, it **autonomously initiates** a video stream request to "take a look" at the situation.
 3.  **Semantic Transmission Control**: When the Agent finds the content unclear or fast-moving, affecting **task execution**, it automatically increases the bitrate, resolution, and frame rate. Otherwise, it downgrades them.
 
-In summary, McpRTC achieves a balance between response latency, accuracy, bandwidth overhead, and device power consumption.
+In summary, McpRTC achieves a balance between response latency, accuracy, bandwidth overhead, and device power consumption. Preliminary tests show that **McpRTC achieves 63.95% power reduction compared to full video streaming while maintaining 98.26% of the original accuracy.**
 
 ## 📦 Usage
 
@@ -69,18 +69,23 @@ After deployment, you need to change the LLM to Gemini in the control panel and 
 
 **4. Run the Project**: Start the server and ensure the network connection between the ESP32 device and the server is normal. You can then start conversing with the model.
 
-⚠️ **Note**: This is an experimental project. Currently, it supports the Lichuang Dev Board Practical S3 as the hardware platform; more platforms will be supported in the future. In the current version, the LLM can use tools like `start_rtc_stream` and `stop_rtc_stream` to actively control the video stream. Additionally, **McpRTC** supports dynamic adjustment of **bitrate and frame rate** at the framework level. However, due to the hardware performance limitations of the S3, while the tool interfaces are implemented, they are not yet actively called by the LLM in the default demo.
+> [!NOTE]
+> This is an experimental project. Currently, it supports the Lichuang Dev Board Practical S3 as the hardware platform; more platforms will be supported in the future. In the current version, the LLM can use tools like `start_rtc_stream` and `stop_rtc_stream` to actively control the video stream. Additionally, **McpRTC** supports dynamic adjustment of **bitrate and frame rate** at the framework level. However, due to the hardware performance limitations of the S3, while the tool interfaces are implemented, they are not yet actively called by the LLM in the default demo.
 
 ## ️✨ Demo
 https://github.com/user-attachments/assets/279b6baf-844d-4e49-9111-cbd73ebee5b4
 
-This video demonstrates the camera's on/off status through real-time power consumption monitoring. You can observe the power fluctuations across different operating modes:
+The video above demonstrates McpRTC under Agent control, autonomously turning on the video on demand:
 
-- **Audio Only Mode**: Power fluctuates around **1.1W**.
-- **Video Stream On**: When the WebRTC connection is established and the video stream is enabled, power rises to approximately **1.4W**.
+When the user dialogue does not require video, the video stream is closed (unlike mainstream VAD solutions where user speech triggers video transmission); when the dialogue relies on visual information, the Agent autonomously turns on the video.
+
+The real-time power consumption fluctuations intuitively show the on/off status of the video stream. The power consumption changes under different working modes are as follows:
+
+- **Audio Only Dialogue**: Power fluctuates around **1.1W**.
+- **Video-Audio Dialogue**: After turning on the real-time video stream, the power rises to around **1.4W**.
 
 > [!NOTE]
-> This distinct step in power consumption serves as a physical indicator to verify whether the camera is active.
+> Feel that the power increase is not significant? This is because the S3 board has limited computing power and only supports 320x240@2fps video transmission. The acquisition and encoding overheads are small, so the power increase is not significant compared to audio-only. For terminal devices with stronger computing power, the benefits of McpRTC under high frame rate & high resolution will be more significant.
 
 ## 🏗 Acknowledgement
 
