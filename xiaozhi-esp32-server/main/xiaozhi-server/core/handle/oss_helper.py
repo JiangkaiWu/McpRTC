@@ -4,8 +4,8 @@ import os
 from uuid import uuid4
 
 # 初始化 OSS 客户端（记得改成你自己的配置）
-auth = oss2.Auth('LTAI5tH6hrrCzDgG5FCKr8Ss', 'v6w1s2UsTQcqfmkrAAUNArE0WG1tCW')
-bucket = oss2.Bucket(auth, 'https://oss-cn-beijing.aliyuncs.com', 'benchmark-generating')
+auth = oss2.Auth('', '')
+bucket = oss2.Bucket(auth, 'https://oss-cn-beijing.aliyuncs.com', '')
 
 def upload_frames_to_oss(frame_list, prefix="frames/", format="JPEG", expire_time=300):
     """
