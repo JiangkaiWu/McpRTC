@@ -8,6 +8,8 @@
 
 > **From "Passive Transmission" to "Active Perception": Autonomous, on-demand, low-latency video transmission driven by Agent intent.**
 
+![teaser1](McpRTC.jpg)
+
 ## 📖 Introduction
 
 **McpRTC** is a Real-Time Communication (RTC) framework running on top of the [MCP (Model Context Protocol)](https://modelcontextprotocol.io/).

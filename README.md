@@ -8,6 +8,8 @@
 
 > ****从“被动传输”到“主动感知”，由Agent意图驱动的自主、按需、低延迟视频传输。****
 
+![teaser1](McpRTC.jpg)
+
 ## 📖 简介 (Introduction)
 
 **McpRTC** 是一个运行在 [MCP (Model Context Protocol) ](https://modelcontextprotocol.io/) 协议之上的实时通信（RTC）框架。
